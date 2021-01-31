@@ -41,7 +41,7 @@
 
 
 # Target file name (without extension).
-TARGET = blinky
+TARGET = teensy_lcd
 
 
 # List C source files here. (C dependencies are automatically generated.)
@@ -63,7 +63,7 @@ MCU = atmega32u4        # Teensy 2.0
 #   so your program will run at the correct speed.  You should also set this
 #   variable to same clock speed.  The _delay_ms() macro uses this, and many
 #   examples use this variable to calculate timings.  Do not add a "UL" here.
-F_CPU = 16000000
+F_CPU = 250000
 
 
 # Output format. (can be srec, ihex, binary)
@@ -73,7 +73,12 @@ FORMAT = ihex
 # Object files directory
 #     To put object files in current directory, use a dot (.), do NOT make
 #     this an empty or blank macro!
-OBJDIR = .
+OBJDIR = obj
+
+# Output files directory
+#     To put output files in current directory, use a dot (.), do NOT make
+#     this an empty or blank macro!
+OUTDIR = out
 
 
 # List C++ source files here. (C dependencies are automatically generated.)
@@ -253,7 +258,7 @@ EXTMEMOPTS =
 #  -Wl,...:     tell GCC to pass this to linker.
 #    -Map:      create map file
 #    --cref:    add cross reference to  map file
-LDFLAGS = -Wl,-Map=$(TARGET).map,--cref
+LDFLAGS = -Wl,-Map=$(OUTDIR)/$(TARGET).map,--cref
 LDFLAGS += -Wl,--relax
 LDFLAGS += -Wl,--gc-sections
 LDFLAGS += $(EXTMEMOPTS)
@@ -274,8 +279,8 @@ AVRDUDE_PROGRAMMER = stk500v2
 # com1 = serial port. Use lpt1 to connect to parallel port.
 AVRDUDE_PORT = com1    # programmer connected to serial device
 
-AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex
-#AVRDUDE_WRITE_EEPROM = -U eeprom:w:$(TARGET).eep
+AVRDUDE_WRITE_FLASH = -U flash:w:$(OUTDIR)/$(TARGET).hex
+#AVRDUDE_WRITE_EEPROM = -U eeprom:w:$(OUTDIR)/$(TARGET).eep
 
 
 # Uncomment the following if you want avrdude's erase cycle counter.
@@ -398,12 +403,12 @@ build: elf hex eep lss sym
 #build: lib
 
 
-elf: $(TARGET).elf
-hex: $(TARGET).hex
-eep: $(TARGET).eep
-lss: $(TARGET).lss
-sym: $(TARGET).sym
-LIBNAME=lib$(TARGET).a
+elf: $(OUTDIR)/$(TARGET).elf
+hex: $(OUTDIR)/$(TARGET).hex
+eep: $(OUTDIR)/$(TARGET).eep
+lss: $(OUTDIR)/$(TARGET).lss
+sym: $(OUTDIR)/$(TARGET).sym
+LIBNAME=$(OUTDIR)/lib$(TARGET).a
 lib: $(LIBNAME)
 
 
@@ -421,16 +426,16 @@ end:
 
 
 # Display size of file.
-HEXSIZE = $(SIZE) --target=$(FORMAT) $(TARGET).hex
-#ELFSIZE = $(SIZE) --mcu=$(MCU) --format=avr $(TARGET).elf
-ELFSIZE = $(SIZE) $(TARGET).elf
+HEXSIZE = $(SIZE) --target=$(FORMAT) $(OUTDIR)/$(TARGET).hex
+#ELFSIZE = $(SIZE) --mcu=$(MCU) --format=avr $(OUTDIR)/$(TARGET).elf
+ELFSIZE = $(SIZE) $(OUTDIR)/$(TARGET).elf
 
 sizebefore:
-	@if test -f $(TARGET).elf; then echo; echo $(MSG_SIZE_BEFORE); $(ELFSIZE); \
+	@if test -f $(OUTDIR)/$(TARGET).elf; then echo; echo $(MSG_SIZE_BEFORE); $(ELFSIZE); \
 	2>/dev/null; echo; fi
 
 sizeafter:
-	@if test -f $(TARGET).elf; then echo; echo $(MSG_SIZE_AFTER); $(ELFSIZE); \
+	@if test -f $(OUTDIR)/$(TARGET).elf; then echo; echo $(MSG_SIZE_AFTER); $(ELFSIZE); \
 	2>/dev/null; echo; fi
 
 
@@ -442,9 +447,12 @@ gccversion :
 
 
 # Program the device.  
-program: $(TARGET).hex $(TARGET).eep
-	$(AVRDUDE) $(AVRDUDE_FLAGS) $(AVRDUDE_WRITE_FLASH) $(AVRDUDE_WRITE_EEPROM)
+#program: $(OUTDIR)/$(TARGET).hex $(OUTDIR)/$(TARGET).eep
+#	$(AVRDUDE) $(AVRDUDE_FLAGS) $(AVRDUDE_WRITE_FLASH) $(AVRDUDE_WRITE_EEPROM)
 
+# I use teensy_loader_cli
+program: $(OUTDIR)/$(TARGET).hex
+	teensy_loader_cli -w -v --mcu=atmega32u4 $(OUTDIR)/$(TARGET).hex
 
 # Generate avr-gdb config/init file which does the following:
 #     define the reset signal, load the target file, connect to target, and set 
@@ -454,18 +462,18 @@ gdb-config:
 	@echo define reset >> $(GDBINIT_FILE)
 	@echo SIGNAL SIGHUP >> $(GDBINIT_FILE)
 	@echo end >> $(GDBINIT_FILE)
-	@echo file $(TARGET).elf >> $(GDBINIT_FILE)
+	@echo file $(OUTDIR)/$(TARGET).elf >> $(GDBINIT_FILE)
 	@echo target remote $(DEBUG_HOST):$(DEBUG_PORT)  >> $(GDBINIT_FILE)
 ifeq ($(DEBUG_BACKEND),simulavr)
 	@echo load  >> $(GDBINIT_FILE)
 endif
 	@echo break main >> $(GDBINIT_FILE)
 
-debug: gdb-config $(TARGET).elf
+debug: gdb-config $(OUTDIR)/$(TARGET).elf
 ifeq ($(DEBUG_BACKEND), avarice)
 	@echo Starting AVaRICE - Press enter when "waiting to connect" message displays.
 	@$(WINSHELL) /c start avarice --jtag $(JTAG_DEV) --erase --program --file \
-	$(TARGET).elf $(DEBUG_HOST):$(DEBUG_PORT)
+	$(OUTDIR)/$(TARGET).elf $(DEBUG_HOST):$(DEBUG_PORT)
 	@$(WINSHELL) /c pause
 
 else
@@ -486,16 +494,16 @@ COFFCONVERT += --change-section-address .eeprom-0x810000
 
 
 
-coff: $(TARGET).elf
+coff: $(OUTDIR)/$(TARGET).elf
 	@echo
-	@echo $(MSG_COFF) $(TARGET).cof
-	$(COFFCONVERT) -O coff-avr $< $(TARGET).cof
+	@echo $(MSG_COFF) $(OUTDIR)/$(TARGET).cof
+	$(COFFCONVERT) -O coff-avr $< $(OUTDIR)/$(TARGET).cof
 
 
-extcoff: $(TARGET).elf
+extcoff: $(OUTDIR)/$(TARGET).elf
 	@echo
-	@echo $(MSG_EXTENDED_COFF) $(TARGET).cof
-	$(COFFCONVERT) -O coff-ext-avr $< $(TARGET).cof
+	@echo $(MSG_EXTENDED_COFF) $(OUTDIR)/$(TARGET).cof
+	$(COFFCONVERT) -O coff-ext-avr $< $(OUTDIR)/$(TARGET).cof
 
 
 
@@ -526,7 +534,7 @@ extcoff: $(TARGET).elf
 
 
 # Create library from object files.
-.SECONDARY : $(TARGET).a
+.SECONDARY : $(OUTDIR)/$(TARGET).a
 .PRECIOUS : $(OBJ)
 %.a: $(OBJ)
 	@echo
@@ -535,7 +543,7 @@ extcoff: $(TARGET).elf
 
 
 # Link: create ELF output file from object files.
-.SECONDARY : $(TARGET).elf
+.SECONDARY : $(OUTDIR)/$(TARGET).elf
 .PRECIOUS : $(OBJ)
 %.elf: $(OBJ)
 	@echo
@@ -578,22 +586,19 @@ $(OBJDIR)/%.o : %.S
 %.i : %.c
 	$(CC) -E -mmcu=$(MCU) -I. $(CFLAGS) $< -o $@ 
 
-send:
-	teensy_loader_cli -w -v --mcu=atmega32u4 blinky.hex
-
 # Target: clean project.
 clean: begin clean_list end
 
 clean_list :
 	@echo
 	@echo $(MSG_CLEANING)
-	$(REMOVE) $(TARGET).hex
-	$(REMOVE) $(TARGET).eep
-	$(REMOVE) $(TARGET).cof
-	$(REMOVE) $(TARGET).elf
-	$(REMOVE) $(TARGET).map
-	$(REMOVE) $(TARGET).sym
-	$(REMOVE) $(TARGET).lss
+	$(REMOVE) $(OUTDIR)/$(TARGET).hex
+	$(REMOVE) $(OUTDIR)/$(TARGET).eep
+	$(REMOVE) $(OUTDIR)/$(TARGET).cof
+	$(REMOVE) $(OUTDIR)/$(TARGET).elf
+	$(REMOVE) $(OUTDIR)/$(TARGET).map
+	$(REMOVE) $(OUTDIR)/$(TARGET).sym
+	$(REMOVE) $(OUTDIR)/$(TARGET).lss
 	$(REMOVE) $(SRC:%.c=$(OBJDIR)/%.o)
 	$(REMOVE) $(SRC:%.c=$(OBJDIR)/%.lst)
 	$(REMOVE) $(SRC:.c=.s)
@@ -605,6 +610,8 @@ clean_list :
 # Create object files directory
 $(shell mkdir $(OBJDIR) 2>/dev/null)
 
+# And output files directory
+$(shell mkdir $(OUTDIR) 2>/dev/null)
 
 # Include the dependency files.
 -include $(shell mkdir .dep 2>/dev/null) $(wildcard .dep/*)
