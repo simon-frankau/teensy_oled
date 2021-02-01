@@ -41,7 +41,7 @@
 
 
 # Target file name (without extension).
-TARGET = teensy_lcd
+TARGET = teensy_oled
 
 
 # List C source files here. (C dependencies are automatically generated.)

@@ -1,5 +1,5 @@
 /*
- * Teensy LCD demo program.
+ * Teensy OLED demo program.
  *
  * Works with Teensy 2.0 connected to an SSD1780-driven 128x32 display
  * - specifically a "Geekcreit 0.91 Inch 128x32 IIC I2C Blue OLED LCD
@@ -101,7 +101,7 @@ static void i2c_send_byte(char c)
     }
 }
 
-static void lcd_init(void)
+static void oled_init(void)
 {
     // Initiate request with a start condition.
     SDA_LOW;
@@ -147,6 +147,6 @@ int main(void)
         LED_OFF;
         _delay_ms(500);
         print("Hello, world\n");
-        lcd_init();
+        oled_init();
     }
 }
