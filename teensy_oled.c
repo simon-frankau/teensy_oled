@@ -49,10 +49,36 @@
 #define I2C_READ 1
 #define I2C_WRITE 0
 
+static const char i2c_init_instrs[] = {
+    // Minimal start-up sequence:
+
+    // Turn on the charge pump, as the breakout board doesn't have a
+    // higher-voltage supply.
+    0x00, 0x08d, 0x14,
+    // Turn display on.
+    0x00, 0xaf,
+    // Turn on all pixels.
+    0x00, 0xa5,
+};
+
+static const int i2c_init_instrs_len =
+    sizeof(i2c_init_instrs) / sizeof(*i2c_init_instrs);
+
 static void i2c_init(void)
 {
     SCL_CONFIG;
     SDA_CONFIG;
+}
+
+// Cycles the clock high then low again. May wait for a receiver
+// holding the clock down for clock stretching.
+static void i2c_clock(void)
+{
+    SCL_HIGH;
+    // Receiver may be holding clock down to clock stretch...
+    while (SCL_READ == 0) {
+    }
+    SCL_LOW;
 }
 
 // TODO: Currently works because I've set the clock slow. We may need delays.
@@ -66,34 +92,22 @@ static void i2c_send_bit(int i)
     }
 
     // Then cycle the clock.
-    SCL_HIGH;
-    // Receiver may be holding clock down to clock stretch...
-    while (SCL_READ == 0) {
-    }
-    SCL_LOW;
+    i2c_clock();
 }
 
 static void i2c_send_byte(char c)
 {
-    i2c_send_bit(c & 0x80);
-    i2c_send_bit(c & 0x40);
-    i2c_send_bit(c & 0x20);
-    i2c_send_bit(c & 0x10);
-    i2c_send_bit(c & 0x08);
-    i2c_send_bit(c & 0x04);
-    i2c_send_bit(c & 0x02);
-    i2c_send_bit(c & 0x01);
+    for (char mask = 0x80; mask != 0; mask >>= 1) {
+        i2c_send_bit(c & mask);
+    }
 
     // Ack bit is sent by device. Don't drive SDA during this.
     SDA_HIGH;
     int acked = !SDA_READ;
-    // And ack the ack/nack.
-    SCL_HIGH;
-    // Receiver may be holding clock down to clock stretch...
-    while (SCL_READ == 0) {
-    }
-    SCL_LOW;
+    // And ack the ack/nack with a normal clock cycle.
+    i2c_clock();
 
+    // TODO: Debug info...
     if (acked) {
         print("ACK\n");
     } else {
@@ -111,15 +125,9 @@ static void oled_init(void)
     // TODO: Could be the other addr?
     i2c_send_byte(0x78);
 
-    // Minimal start-up sequence:
-
-    // Turn on the charge pump, as the breakout board doesn't have a
-    // higher-voltage supply.
-    i2c_send_byte(0x00); i2c_send_byte(0x8d); i2c_send_byte(0x14);
-    // Turn display on.
-    i2c_send_byte(0x00); i2c_send_byte(0xAF);
-    // Turn on all pixels.
-    i2c_send_byte(0x00); i2c_send_byte(0xA5);
+    for (int i = 0; i < i2c_init_instrs_len; i++) {
+        i2c_send_byte(i2c_init_instrs[i]);
+    }
 
     // Stop condition.
     SCL_HIGH;
