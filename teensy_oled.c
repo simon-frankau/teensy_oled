@@ -50,13 +50,33 @@
 #define I2C_WRITE 0
 
 static const char i2c_init_instrs[] = {
-    // Minimal start-up sequence:
+    // Data sheet recommended initialisation sequence:
 
-    // Turn on the charge pump, as the breakout board doesn't have a
-    // higher-voltage supply.
+    // Set mux
+    0x00, 0xa8, 0x1f, // Only 32 rows
+    // Set display offset
+    0x00, 0xd3, 0x00,
+    // Set display start line
+    0x00, 0x40,
+    // Set segment remap
+    0x00, 0xa0,
+    // Set COM scan direction
+    0x00, 0xc0,
+    // Set COM pin hw conf
+    0x00, 0xda, 0x02, // This display only uses alternate COM lines.
+    // Contrast control
+    0x00, 0x81, 0x7f,
+    // Disable entire display on
+    0x00, 0xa4,
+    // Set normal display
+    0x00, 0xa6,
+    // Set oscillator frequency
+    0x00, 0xd5, 0x80,
+    // Enable charge pump regulator
     0x00, 0x08d, 0x14,
     // Turn display on.
     0x00, 0xaf,
+
     // Turn on all pixels.
     0x00, 0xa5,
 };
@@ -84,14 +104,13 @@ static void i2c_clock(void)
 // TODO: Currently works because I've set the clock slow. We may need delays.
 static void i2c_send_bit(int i)
 {
-    // Set data up first.
+    // Set data up first...
     if (i) {
         SDA_HIGH;
     } else {
         SDA_LOW;
     }
-
-    // Then cycle the clock.
+    // then cycle the clock.
     i2c_clock();
 }
 
