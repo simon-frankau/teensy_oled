@@ -193,8 +193,19 @@ static const char oled_init_instrs[] = {
     // Turn display on.
     0xaf,
 
-    // Turn on all pixels.
-    0xa5,
+    // Extra instructions beyond datasheet.
+
+    // Set horizontal addressing mode.
+    0x20, 0x00,
+
+    // TODO: Attach this to the source blit function.
+    // Start and end columns
+    0x21, 0x00, 0x7f,
+    // Start and end pages
+    0x22, 0x00, 0x07,
+
+    // Display memory contents.
+    0xa4,
 };
 
 static const int oled_init_instrs_len =
@@ -214,6 +225,56 @@ static void oled_init(void)
     i2c_stop();
 }
 
+static void oled_pattern(void)
+{
+    i2c_start();
+
+    // Start I2C request with the display address.
+    i2c_send_byte(0x78 | OLED_ADDR);
+
+    // Start writing data.
+    i2c_send_byte(0x40);
+
+    for (int i = 0; i < 128 * 4; i++) {
+        i2c_send_byte(i);
+        // i2c_send_byte(0xaa);
+    }
+
+    i2c_stop();
+
+}
+
+static void oled_pattern2(void)
+{
+    // Looks to me like Co bit means do just one command, then have another check.
+    // Useful for starting off with a command then switching to data, e.g. for
+    // blitting.
+
+    i2c_start();
+
+    // Start I2C request with the display address.
+    i2c_send_byte(0x78 | OLED_ADDR);
+
+    // Start writing data.
+
+    // TODO: Testing clipping to "display all on" then back to "show
+    // memory", before filling data.
+    i2c_send_byte(0x80);
+    i2c_send_byte(0xa5);
+    i2c_send_byte(0x80);
+    i2c_send_byte(0xa4);
+    i2c_send_byte(0x40);
+
+    for (int i = 0; i < 64 * 4; i++) {
+        i2c_send_byte(0xaa);
+        i2c_send_byte(0x55);
+    }
+
+    i2c_stop();
+
+}
+
+
 int main(void)
 {
     // CPU prescale must be set with interrupts disabled. They're off
@@ -228,6 +289,8 @@ int main(void)
     // Initialise USB for debug, but don't wait.
     usb_init();
 
+    int flip = 0;
+
     // Blink and print. \o/
     while (1) {
         led_on();
@@ -236,5 +299,11 @@ int main(void)
         _delay_ms(500);
         print("Hello, world\n");
         oled_init();
+        if (flip) {
+            oled_pattern2();
+        } else {
+            oled_pattern();
+        }
+        flip = !flip;
     }
 }
