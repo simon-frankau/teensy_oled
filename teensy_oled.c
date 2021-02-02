@@ -15,6 +15,14 @@
 #include "usb_debug_only.h"
 #include "print.h"
 
+#ifdef ALTERNATIVE_OLED_ADDRESS
+static const char OLED_ADDR = 2;
+#else
+static const char OLED_ADDR = 0;
+#endif
+
+
+
 ////////////////////////////////////////////////////////////////////////
 // CPU prescaler
 //
@@ -157,33 +165,36 @@ static void i2c_send_byte(char c)
 static const char oled_init_instrs[] = {
     // Data sheet recommended initialisation sequence:
 
+    // Start with 0x00 to signify that commands follow.
+    0x00,
+
     // Set mux
-    0x00, 0xa8, 0x1f, // Only 32 rows
+    0xa8, 0x1f, // Only 32 rows
     // Set display offset
-    0x00, 0xd3, 0x00,
+    0xd3, 0x00,
     // Set display start line
-    0x00, 0x40,
+    0x40,
     // Set segment remap
-    0x00, 0xa0,
+    0xa0,
     // Set COM scan direction
-    0x00, 0xc0,
+    0xc0,
     // Set COM pin hw conf
-    0x00, 0xda, 0x02, // This display only uses alternate COM lines.
+    0xda, 0x02, // This display only uses alternate COM lines.
     // Contrast control
-    0x00, 0x81, 0x7f,
+    0x81, 0x7f,
     // Disable entire display on
-    0x00, 0xa4,
+    0xa4,
     // Set normal display
-    0x00, 0xa6,
+    0xa6,
     // Set oscillator frequency
-    0x00, 0xd5, 0x80,
+    0xd5, 0x80,
     // Enable charge pump regulator
-    0x00, 0x08d, 0x14,
+    0x08d, 0x14,
     // Turn display on.
-    0x00, 0xaf,
+    0xaf,
 
     // Turn on all pixels.
-    0x00, 0xa5,
+    0xa5,
 };
 
 static const int oled_init_instrs_len =
@@ -194,8 +205,7 @@ static void oled_init(void)
     i2c_start();
 
     // Start I2C request with the display address.
-    // TODO: Could be the other addr?
-    i2c_send_byte(0x78);
+    i2c_send_byte(0x78 | OLED_ADDR);
 
     for (int i = 0; i < oled_init_instrs_len; i++) {
         i2c_send_byte(oled_init_instrs[i]);
