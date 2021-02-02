@@ -59,8 +59,8 @@ static inline void led_off(void)
 //
 
 // I2C on D0/D1: SCL on D0, SDA on D1
-static const char SCL_IDX = 0;
-static const char SDA_IDX = 1;
+static const char SCL = 0;
+static const char SDA = 1;
 
 static void i2c_init(void)
 {
@@ -68,33 +68,52 @@ static void i2c_init(void)
     // set them to output zero, and enable/disable driving it low.
 
     // SCL
-    DDRD &= ~(1 << SCL_IDX);
-    PORTD &= ~(1 << SCL_IDX);
+    DDRD &= ~(1 << SCL);
+    PORTD &= ~(1 << SCL);
     // SDA
-    DDRD &= ~(1 << SDA_IDX);
-    PORTD &= ~(1 << SDA_IDX);
+    DDRD &= ~(1 << SDA);
+    PORTD &= ~(1 << SDA);
 }
 
-#define SCL_HIGH (DDRD &= ~(1 << 0))
-#define SCL_LOW  (DDRD |= (1 << 0))
-#define SCL_READ (PIND & (1 << 0))
+static inline void i2c_release(char pin)
+{
+    DDRD &= ~(1 << pin);
+}
 
-#define SDA_HIGH (DDRD &= ~(1 << 1))
-#define SDA_LOW  (DDRD |= (1 << 1))
-#define SDA_READ (PIND & (1 << 1))
+static inline void i2c_pulldown(char pin)
+{
+    DDRD |= 1 << pin;
+}
 
-#define I2C_READ 1
-#define I2C_WRITE 0
+static inline char i2c_read(char pin)
+{
+    return PIND & (1 << pin);
+}
+
+static inline void i2c_start(void)
+{
+    // An i2c transaction is initiated with an SDA transition while
+    // SCL is high..
+    i2c_pulldown(SDA);
+    i2c_pulldown(SCL);
+}
+
+static inline void i2c_stop(void)
+{
+    // And finishes with another SDA transition while SCL is high.
+    i2c_release(SCL);
+    i2c_release(SDA);
+}
 
 // Cycles the clock high then low again. May wait for a receiver
 // holding the clock down for clock stretching.
 static void i2c_clock(void)
 {
-    SCL_HIGH;
+    i2c_release(SCL);
     // Receiver may be holding clock down to clock stretch...
-    while (SCL_READ == 0) {
+    while (i2c_read(SCL) == 0) {
     }
-    SCL_LOW;
+    i2c_pulldown(SCL);
 }
 
 // TODO: Currently works because I've set the clock slow. We may need delays.
@@ -102,9 +121,9 @@ static void i2c_send_bit(int i)
 {
     // Set data up first...
     if (i) {
-        SDA_HIGH;
+        i2c_release(SDA);
     } else {
-        SDA_LOW;
+        i2c_pulldown(SDA);
     }
     // then cycle the clock.
     i2c_clock();
@@ -112,13 +131,14 @@ static void i2c_send_bit(int i)
 
 static void i2c_send_byte(char c)
 {
+    // Send a byte of data.
     for (char mask = 0x80; mask != 0; mask >>= 1) {
         i2c_send_bit(c & mask);
     }
 
-    // Ack bit is sent by device. Don't drive SDA during this.
-    SDA_HIGH;
-    int acked = !SDA_READ;
+    // In reply, an ack bit is sent by device. Don't drive SDA during this.
+    i2c_release(SDA);
+    int acked = !i2c_read(SDA);
     // And ack the ack/nack with a normal clock cycle.
     i2c_clock();
 
@@ -171,9 +191,7 @@ static const int oled_init_instrs_len =
 
 static void oled_init(void)
 {
-    // Initiate request with a start condition.
-    SDA_LOW;
-    SCL_LOW;
+    i2c_start();
 
     // Start I2C request with the display address.
     // TODO: Could be the other addr?
@@ -183,9 +201,7 @@ static void oled_init(void)
         i2c_send_byte(oled_init_instrs[i]);
     }
 
-    // Stop condition.
-    SCL_HIGH;
-    SDA_HIGH;
+    i2c_stop();
 }
 
 int main(void)
