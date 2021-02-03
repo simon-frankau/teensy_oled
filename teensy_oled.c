@@ -162,6 +162,23 @@ static void i2c_send_byte(char c)
 // OLED
 //
 
+// Sigh. For array initialisation, const values are insufficient...
+#define OLED_SET_MUX_RATIO          0xa8
+#define OLED_SET_DISPLAY_OFFSET     0xd3
+#define OLED_SET_DISPLAY_START_LINE 0x40
+#define OLED_SET_SEGMENT_REMAP      0xa0
+#define OLED_SET_COM_SCAN_DIR       0xc0
+#define OLED_SET_COM_HW_CONF        0xda
+#define OLED_SET_CONTRAST           0x81
+#define OLED_SET_ENTIRE_DISPLAY     0xa4
+#define OLED_SET_INVERTED           0xa6
+#define OLED_SET_OSC_FREQ           0xd5
+#define OLED_SET_CHARGE_PUMP        0x8d
+#define OLED_SET_ADDR_MODE          0x20
+#define OLED_SET_COL_ADDR           0x21
+#define OLED_SET_PAGE_ADDR          0x22
+#define OLED_SET_DISPLAY_ON_OFF     0xAE
+
 static const char oled_init_instrs[] = {
     // Data sheet recommended initialisation sequence:
 
@@ -169,43 +186,40 @@ static const char oled_init_instrs[] = {
     0x00,
 
     // Set mux
-    0xa8, 0x1f, // Only 32 rows
+    OLED_SET_MUX_RATIO, 0x1f, // Only 32 rows
     // Set display offset
-    0xd3, 0x00,
+    OLED_SET_DISPLAY_OFFSET, 0x00,
     // Set display start line
-    0x40,
+    OLED_SET_DISPLAY_START_LINE + 0x00,
     // Set segment remap
-    0xa0,
+    OLED_SET_SEGMENT_REMAP | 0x00, // 0x01 for reverse mapping
     // Set COM scan direction
-    0xc0,
+    OLED_SET_COM_SCAN_DIR | 0x00, // 0x08 for reverse mapping
     // Set COM pin hw conf
-    0xda, 0x02, // This display only uses alternate COM lines.
+    OLED_SET_COM_HW_CONF, 0x02, // Alternate lines, normal direction
     // Contrast control
-    0x81, 0x7f,
+    OLED_SET_CONTRAST, 0x7f,
     // Disable entire display on
-    0xa4,
+    OLED_SET_ENTIRE_DISPLAY | 0x00, // 0x01 to light entire display
     // Set normal display
-    0xa6,
+    OLED_SET_INVERTED | 0x00, // 0x01 to invert
     // Set oscillator frequency
-    0xd5, 0x80,
+    OLED_SET_OSC_FREQ, 0x80,
     // Enable charge pump regulator
-    0x08d, 0x14,
+    OLED_SET_CHARGE_PUMP, 0x14, // 0x10 to disable.
     // Turn display on.
-    0xaf,
+    OLED_SET_DISPLAY_ON_OFF | 0x01,
 
     // Extra instructions beyond datasheet.
 
     // Set horizontal addressing mode.
-    0x20, 0x00,
+    OLED_SET_ADDR_MODE, 0x00,
 
     // TODO: Attach this to the source blit function.
     // Start and end columns
-    0x21, 0x00, 0x7f,
+    OLED_SET_COL_ADDR, 0x00, 0x7f,
     // Start and end pages
-    0x22, 0x00, 0x07,
-
-    // Display memory contents.
-    0xa4,
+    OLED_SET_PAGE_ADDR, 0x00, 0x07,
 };
 
 static const int oled_init_instrs_len =
