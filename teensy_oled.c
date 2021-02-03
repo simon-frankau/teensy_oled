@@ -5,7 +5,7 @@
  * - specifically a "Geekcreit 0.91 Inch 128x32 IIC I2C Blue OLED LCD
  * Display DIY Module"
  *
- * (C) 2012 Simon Frankau
+ * (C) 2021 Simon Frankau
  */
 
 #include <avr/io.h>
@@ -20,8 +20,6 @@ static const char OLED_ADDR = 2;
 #else
 static const char OLED_ADDR = 0;
 #endif
-
-
 
 ////////////////////////////////////////////////////////////////////////
 // CPU prescaler
@@ -98,19 +96,36 @@ static inline char i2c_read(char pin)
     return PIND & (1 << pin);
 }
 
+// Timing requirements:
+//
+// 2.5us per clock cycle
+// 0.6us between SDA and SCL on start
+// 0.6us between SCL and SDA on stop
+// 1.3us idle time
+// 0.1us data set-up
+// 0.3us data hold
+//
+// Targeting 2MHz Teensy (default clock speed), so the main concern is anything that takes
+
 static inline void i2c_start(void)
 {
     // An i2c transaction is initiated with an SDA transition while
-    // SCL is high..
+    // SCL is high...
     i2c_pulldown(SDA);
+    _delay_us(1);
     i2c_pulldown(SCL);
 }
 
 static inline void i2c_stop(void)
 {
     // And finishes with another SDA transition while SCL is high.
+    i2c_pulldown(SDA); // Start with SDA down.
+    _delay_us(1);
     i2c_release(SCL);
+    _delay_us(1);
     i2c_release(SDA);
+    // Idle time
+    _delay_us(2);
 }
 
 // Cycles the clock high then low again. May wait for a receiver
@@ -124,7 +139,6 @@ static void i2c_clock(void)
     i2c_pulldown(SCL);
 }
 
-// TODO: Currently works because I've set the clock slow. We may need delays.
 static void i2c_send_bit(int i)
 {
     // Set data up first...
@@ -137,7 +151,7 @@ static void i2c_send_bit(int i)
     i2c_clock();
 }
 
-static void i2c_send_byte(char c)
+static char i2c_send_byte(char c)
 {
     // Send a byte of data.
     for (char mask = 0x80; mask != 0; mask >>= 1) {
@@ -150,11 +164,10 @@ static void i2c_send_byte(char c)
     // And ack the ack/nack with a normal clock cycle.
     i2c_clock();
 
-    // TODO: Debug info...
-    if (acked) {
-        print("ACK\n");
-    } else {
-        print ("NACK\n");
+    return acked;
+
+    if (!acked) {
+        print ("I2C NACK :(\n");
     }
 }
 
@@ -285,7 +298,6 @@ static void oled_pattern2(void)
     }
 
     i2c_stop();
-
 }
 
 
@@ -295,7 +307,7 @@ int main(void)
     // when the CPU starts.
     //
     // Don't forget to sync this with F_CPU in the Makefile.
-    cpu_prescale(CPU_250kHz);
+    cpu_prescale(CPU_2MHz);
     led_init();
     led_off();
     i2c_init();
@@ -311,7 +323,6 @@ int main(void)
         _delay_ms(500);
         led_off();
         _delay_ms(500);
-        print("Hello, world\n");
         oled_init();
         if (flip) {
             oled_pattern2();
