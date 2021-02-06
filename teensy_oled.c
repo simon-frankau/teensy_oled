@@ -12,8 +12,10 @@
 #include <avr/pgmspace.h>
 #include <util/delay.h>
 
+#include "gen/head.h"
 #include "usb_debug_only.h"
 #include "print.h"
+
 
 #ifdef ALTERNATIVE_OLED_ADDRESS
 static const char OLED_ADDR = 2;
@@ -273,6 +275,9 @@ static void oled_pattern(void)
 
 static void oled_pattern2(void)
 {
+    // TODO: Further experimenting suggests this is not the case.
+    // Needs more investigation. <shruggie/>
+    //
     // Looks to me like Co bit means do just one command, then have another check.
     // Useful for starting off with a command then switching to data, e.g. for
     // blitting.
@@ -300,6 +305,46 @@ static void oled_pattern2(void)
     i2c_stop();
 }
 
+static void oled_pattern3(void)
+{
+    // Looks to me like Co bit means do just one command, then have another check.
+    // Useful for starting off with a command then switching to data, e.g. for
+    // blitting.
+
+    i2c_start();
+
+    // Start I2C request with the display address.
+    i2c_send_byte(0x78 | OLED_ADDR);
+
+    i2c_send_byte(0x00);
+    i2c_send_byte(0x21); i2c_send_byte(0x00); i2c_send_byte(0x17);
+
+    i2c_stop();
+
+    i2c_start();
+
+    // Start I2C request with the display address.
+    i2c_send_byte(0x78 | OLED_ADDR);
+
+
+    // Start writing data.
+
+    // TODO: Testing clipping to "display all on" then back to "show
+    // memory", before filling data.
+//    i2c_send_byte(0x80);
+//    i2c_send_byte(0x21); i2c_send_byte(0x00); i2c_send_byte(0x18);
+//    i2c_send_byte(0x80);
+//    i2c_send_byte(0x22); i2c_send_byte(0x00); i2c_send_byte(0x02);
+    i2c_send_byte(0x40);
+
+    for (int i = 0; i < 24 * 3; i++) {
+        i2c_send_byte(image[i]);
+    }
+
+    i2c_stop();
+}
+
+
 
 int main(void)
 {
@@ -325,7 +370,7 @@ int main(void)
         _delay_ms(500);
         oled_init();
         if (flip) {
-            oled_pattern2();
+            oled_pattern3();
         } else {
             oled_pattern();
         }
