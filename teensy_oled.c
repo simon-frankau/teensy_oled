@@ -194,13 +194,13 @@ static char i2c_send_byte(char c)
 #define OLED_SET_COL_ADDR           0x21
 #define OLED_SET_PAGE_ADDR          0x22
 #define OLED_SET_DISPLAY_ON_OFF     0xAE
+#define OLED_SET_PAGE_START_ADDR    0xB0
 
 static const char oled_init_instrs[] = {
     // Data sheet recommended initialisation sequence:
 
     // Start with 0x00 to signify that commands follow.
     0x00,
-
     // Set mux
     OLED_SET_MUX_RATIO, 0x1f, // Only 32 rows
     // Set display offset
@@ -225,53 +225,61 @@ static const char oled_init_instrs[] = {
     OLED_SET_CHARGE_PUMP, 0x14, // 0x10 to disable.
     // Turn display on.
     OLED_SET_DISPLAY_ON_OFF | 0x01,
-
-    // Extra instructions beyond datasheet.
-
-    // Set horizontal addressing mode.
-    OLED_SET_ADDR_MODE, 0x00,
-
-    // TODO: Attach this to the source blit function.
-    // Start and end columns
-    OLED_SET_COL_ADDR, 0x00, 0x7f,
-    // Start and end pages
-    OLED_SET_PAGE_ADDR, 0x00, 0x07,
 };
 
 static const int oled_init_instrs_len =
     sizeof(oled_init_instrs) / sizeof(*oled_init_instrs);
 
-static void oled_init(void)
+// Instructions to blit over entire screen
+static const char oled_full_screen_instrs[] = {
+    // Commands follow
+    00,
+    // Horizontal addressing mode.
+    OLED_SET_ADDR_MODE, 0x00,
+    // Columns 0x00 to 0x7f
+    OLED_SET_COL_ADDR, 0x00, 0x7f,
+    // Pages 0x00 to 0x07
+    OLED_SET_PAGE_ADDR, 0x00, 0x07,
+};
+
+static const int oled_full_screen_instrs_len =
+    sizeof(oled_full_screen_instrs) / sizeof(*oled_full_screen_instrs);
+
+// Send a sequence of bytes over i2c.
+static void oled_sequence(char const *data, int count)
 {
     i2c_start();
-
-    // Start I2C request with the display address.
     i2c_send_byte(0x78 | OLED_ADDR);
 
-    for (int i = 0; i < oled_init_instrs_len; i++) {
-        i2c_send_byte(oled_init_instrs[i]);
+    for (int i = 0; i < count; i++) {
+        i2c_send_byte(data[i]);
     }
 
     i2c_stop();
 }
 
+static void oled_init(void)
+{
+    oled_sequence(oled_init_instrs, oled_init_instrs_len);
+}
+
 static void oled_pattern(void)
 {
-    i2c_start();
-
-    // Start I2C request with the display address.
-    i2c_send_byte(0x78 | OLED_ADDR);
+    // Prepare to blit over the entire screen.
+    oled_sequence(oled_full_screen_instrs, oled_full_screen_instrs_len);
 
     // Start writing data.
+    i2c_start();
+    i2c_send_byte(0x78 | OLED_ADDR);
     i2c_send_byte(0x40);
 
     for (int i = 0; i < 128 * 4; i++) {
-        i2c_send_byte(i);
+        // i2c_send_byte(i);
+        i2c_send_byte(0xff);
         // i2c_send_byte(0xaa);
     }
 
     i2c_stop();
-
 }
 
 static void oled_pattern2(void)
@@ -290,7 +298,7 @@ static void oled_pattern2(void)
 
     // Start writing data.
 
-    // TODO: Testing clipping to "display all on" then back to "show
+    // TODO: Testing flipping to "display all on" then back to "show
     // memory", before filling data.
     i2c_send_byte(0x80);
     i2c_send_byte(0xa5);
@@ -306,46 +314,51 @@ static void oled_pattern2(void)
     i2c_stop();
 }
 
-static void oled_pattern3(void)
+// Blit an image to the screen. Y coordinates are pages (multiples of 8 pixels)
+static void oled_blit(char x, char y, char w, char h, char const *image)
 {
-    // Looks to me like Co bit means do just one command, then have another check.
-    // Useful for starting off with a command then switching to data, e.g. for
-    // blitting.
-
     i2c_start();
-
-    // Start I2C request with the display address.
     i2c_send_byte(0x78 | OLED_ADDR);
-
     i2c_send_byte(0x00);
-    i2c_send_byte(0x21); i2c_send_byte(0x00); i2c_send_byte(0x17);
+
+    // I'd much rather use horizontal addressing mode, but when we set
+    // the start and end column it acutally starts loading memory at start
+    // column & 0xf0. It wraps around to the right place, though. The
+    // bugs of cheap hardware still surprise me.
+    //
+    // As it is, we use page mode, and write each page separately.
+    i2c_send_byte(OLED_SET_ADDR_MODE); i2c_send_byte(0x02); // Page mode
 
     i2c_stop();
 
-    i2c_start();
+    char const *image_ptr = image;
+    for (int page = y; page < y + h; page++) {
 
-    // Start I2C request with the display address.
-    i2c_send_byte(0x78 | OLED_ADDR);
+        i2c_start();
+        i2c_send_byte(0x78 | OLED_ADDR);
+        i2c_send_byte(0x00);
 
+        i2c_send_byte(OLED_SET_PAGE_START_ADDR | page);
+        // High nibble must be loaded first, else it zeros the low nibble.
+        i2c_send_byte(0x10 | x >> 4);
+        i2c_send_byte(x & 0x0f);
+        i2c_stop();
 
-    // Start writing data.
-
-    // TODO: Testing clipping to "display all on" then back to "show
-    // memory", before filling data.
-//    i2c_send_byte(0x80);
-//    i2c_send_byte(0x21); i2c_send_byte(0x00); i2c_send_byte(0x18);
-//    i2c_send_byte(0x80);
-//    i2c_send_byte(0x22); i2c_send_byte(0x00); i2c_send_byte(0x02);
-    i2c_send_byte(0x40);
-
-    for (int i = 0; i < 24 * 3; i++) {
-        i2c_send_byte(heels[i]);
+        i2c_start();
+        i2c_send_byte(0x78 | OLED_ADDR);
+        i2c_send_byte(0x40);
+        for (int i = 0; i < w; i++) {
+            i2c_send_byte(*image_ptr++);
+        }
+        i2c_stop();
     }
-
-    i2c_stop();
 }
 
-
+static void oled_pattern3(void)
+{
+    oled_blit(0, 0, 24, 3, head);
+    oled_blit(128 - 24, 0, 24, 3, heels);
+}
 
 int main(void)
 {
