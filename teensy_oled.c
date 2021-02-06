@@ -19,9 +19,9 @@
 
 
 #ifdef ALTERNATIVE_OLED_ADDRESS
-static const char OLED_ADDR = 2;
+static const char OLED_SUB_ADDR = 2;
 #else
-static const char OLED_ADDR = 0;
+static const char OLED_SUB_ADDR = 0;
 #endif
 
 ////////////////////////////////////////////////////////////////////////
@@ -110,27 +110,6 @@ static inline char i2c_read(char pin)
 //
 // Targeting 2MHz Teensy (default clock speed), so the main concern is anything that takes
 
-static inline void i2c_start(void)
-{
-    // An i2c transaction is initiated with an SDA transition while
-    // SCL is high...
-    i2c_pulldown(SDA);
-    _delay_us(1);
-    i2c_pulldown(SCL);
-}
-
-static inline void i2c_stop(void)
-{
-    // And finishes with another SDA transition while SCL is high.
-    i2c_pulldown(SDA); // Start with SDA down.
-    _delay_us(1);
-    i2c_release(SCL);
-    _delay_us(1);
-    i2c_release(SDA);
-    // Idle time
-    _delay_us(2);
-}
-
 // Cycles the clock high then low again. May wait for a receiver
 // holding the clock down for clock stretching.
 static void i2c_clock(void)
@@ -174,33 +153,60 @@ static char i2c_send_byte(char c)
     }
 }
 
+static inline void i2c_start(char addr)
+{
+    // An i2c transaction is initiated with an SDA transition while
+    // SCL is high...
+    i2c_pulldown(SDA);
+    _delay_us(1);
+    i2c_pulldown(SCL);
+
+    i2c_send_byte(addr);
+}
+
+static inline void i2c_stop(void)
+{
+    // And finishes with another SDA transition while SCL is high.
+    i2c_pulldown(SDA); // Start with SDA down.
+    _delay_us(1);
+    i2c_release(SCL);
+    _delay_us(1);
+    i2c_release(SDA);
+    // Idle time
+    _delay_us(2);
+}
+
 ////////////////////////////////////////////////////////////////////////
 // OLED
 //
 
 // Sigh. For array initialisation, const values are insufficient...
-#define OLED_SET_MUX_RATIO          0xa8
-#define OLED_SET_DISPLAY_OFFSET     0xd3
-#define OLED_SET_DISPLAY_START_LINE 0x40
-#define OLED_SET_SEGMENT_REMAP      0xa0
-#define OLED_SET_COM_SCAN_DIR       0xc0
-#define OLED_SET_COM_HW_CONF        0xda
-#define OLED_SET_CONTRAST           0x81
-#define OLED_SET_ENTIRE_DISPLAY     0xa4
-#define OLED_SET_INVERTED           0xa6
-#define OLED_SET_OSC_FREQ           0xd5
-#define OLED_SET_CHARGE_PUMP        0x8d
+#define OLED_ADDR                   (0x78 | OLED_SUB_ADDR)
+#define OLED_CMD                    0x00
+#define OLED_DATA                   0x40
+
+#define OLED_SET_LOWER_COLUMN       0x00
+#define OLED_SET_UPPER_COLUMN       0x10
 #define OLED_SET_ADDR_MODE          0x20
 #define OLED_SET_COL_ADDR           0x21
 #define OLED_SET_PAGE_ADDR          0x22
-#define OLED_SET_DISPLAY_ON_OFF     0xAE
-#define OLED_SET_PAGE_START_ADDR    0xB0
+#define OLED_SET_DISPLAY_START_LINE 0x40
+#define OLED_SET_CONTRAST           0x81
+#define OLED_SET_CHARGE_PUMP        0x8d
+#define OLED_SET_SEGMENT_REMAP      0xa0
+#define OLED_SET_ENTIRE_DISPLAY     0xa4
+#define OLED_SET_INVERTED           0xa6
+#define OLED_SET_MUX_RATIO          0xa8
+#define OLED_SET_DISPLAY_ON_OFF     0xae
+#define OLED_SET_PAGE_START_ADDR    0xb0
+#define OLED_SET_COM_SCAN_DIR       0xc0
+#define OLED_SET_DISPLAY_OFFSET     0xd3
+#define OLED_SET_OSC_FREQ           0xd5
+#define OLED_SET_COM_HW_CONF        0xda
 
 static const char oled_init_instrs[] = {
     // Data sheet recommended initialisation sequence:
-
-    // Start with 0x00 to signify that commands follow.
-    0x00,
+    OLED_CMD,
     // Set mux
     OLED_SET_MUX_RATIO, 0x1f, // Only 32 rows
     // Set display offset
@@ -233,7 +239,7 @@ static const int oled_init_instrs_len =
 // Instructions to blit over entire screen
 static const char oled_full_screen_instrs[] = {
     // Commands follow
-    00,
+    OLED_CMD,
     // Horizontal addressing mode.
     OLED_SET_ADDR_MODE, 0x00,
     // Columns 0x00 to 0x7f
@@ -248,13 +254,10 @@ static const int oled_full_screen_instrs_len =
 // Send a sequence of bytes over i2c.
 static void oled_sequence(char const *data, int count)
 {
-    i2c_start();
-    i2c_send_byte(0x78 | OLED_ADDR);
-
+    i2c_start(OLED_ADDR);
     for (int i = 0; i < count; i++) {
         i2c_send_byte(data[i]);
     }
-
     i2c_stop();
 }
 
@@ -263,90 +266,47 @@ static void oled_init(void)
     oled_sequence(oled_init_instrs, oled_init_instrs_len);
 }
 
-static void oled_pattern(void)
+static void oled_clear(void)
 {
     // Prepare to blit over the entire screen.
     oled_sequence(oled_full_screen_instrs, oled_full_screen_instrs_len);
 
-    // Start writing data.
-    i2c_start();
-    i2c_send_byte(0x78 | OLED_ADDR);
-    i2c_send_byte(0x40);
-
+    // And write the data
+    i2c_start(OLED_ADDR);
+    i2c_send_byte(OLED_DATA);
     for (int i = 0; i < 128 * 4; i++) {
-        // i2c_send_byte(i);
-        i2c_send_byte(0xff);
-        // i2c_send_byte(0xaa);
+        i2c_send_byte(0x00);
     }
-
-    i2c_stop();
-}
-
-static void oled_pattern2(void)
-{
-    // TODO: Further experimenting suggests this is not the case.
-    // Needs more investigation. <shruggie/>
-    //
-    // Looks to me like Co bit means do just one command, then have another check.
-    // Useful for starting off with a command then switching to data, e.g. for
-    // blitting.
-
-    i2c_start();
-
-    // Start I2C request with the display address.
-    i2c_send_byte(0x78 | OLED_ADDR);
-
-    // Start writing data.
-
-    // TODO: Testing flipping to "display all on" then back to "show
-    // memory", before filling data.
-    i2c_send_byte(0x80);
-    i2c_send_byte(0xa5);
-    i2c_send_byte(0x80);
-    i2c_send_byte(0xa4);
-    i2c_send_byte(0x40);
-
-    for (int i = 0; i < 64 * 4; i++) {
-        i2c_send_byte(0xaa);
-        i2c_send_byte(0x55);
-    }
-
     i2c_stop();
 }
 
 // Blit an image to the screen. Y coordinates are pages (multiples of 8 pixels)
 static void oled_blit(char x, char y, char w, char h, char const *image)
 {
-    i2c_start();
-    i2c_send_byte(0x78 | OLED_ADDR);
-    i2c_send_byte(0x00);
-
     // I'd much rather use horizontal addressing mode, but when we set
     // the start and end column it acutally starts loading memory at start
     // column & 0xf0. It wraps around to the right place, though. The
     // bugs of cheap hardware still surprise me.
     //
     // As it is, we use page mode, and write each page separately.
+    i2c_start(OLED_ADDR);
+    i2c_send_byte(OLED_CMD);
     i2c_send_byte(OLED_SET_ADDR_MODE); i2c_send_byte(0x02); // Page mode
-
     i2c_stop();
 
     char const *image_ptr = image;
     for (int page = y; page < y + h; page++) {
 
-        i2c_start();
-        i2c_send_byte(0x78 | OLED_ADDR);
-        i2c_send_byte(0x00);
-
+        i2c_start(OLED_ADDR);
+        i2c_send_byte(OLED_CMD);
         i2c_send_byte(OLED_SET_PAGE_START_ADDR | page);
         // High nibble must be loaded first, else it zeros the low nibble.
-        i2c_send_byte(0x10 | x >> 4);
-        i2c_send_byte(x & 0x0f);
+        i2c_send_byte(OLED_SET_UPPER_COLUMN | (x >> 4));
+        i2c_send_byte(OLED_SET_LOWER_COLUMN | (x & 0x0f));
         i2c_stop();
 
-        i2c_start();
-        i2c_send_byte(0x78 | OLED_ADDR);
-        i2c_send_byte(0x40);
+        i2c_start(OLED_ADDR);
+        i2c_send_byte(OLED_DATA);
         for (int i = 0; i < w; i++) {
             i2c_send_byte(*image_ptr++);
         }
@@ -354,7 +314,7 @@ static void oled_blit(char x, char y, char w, char h, char const *image)
     }
 }
 
-static void oled_pattern3(void)
+static void oled_images(void)
 {
     oled_blit(0, 0, 24, 3, head);
     oled_blit(128 - 24, 0, 24, 3, heels);
@@ -384,9 +344,9 @@ int main(void)
         _delay_ms(500);
         oled_init();
         if (flip) {
-            oled_pattern3();
+            oled_images();
         } else {
-            oled_pattern();
+            oled_clear();
         }
         flip = !flip;
     }
