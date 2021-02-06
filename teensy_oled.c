@@ -340,8 +340,10 @@ static void oled_write(char x, char y, char const *str)
     i2c_stop();
 }
 
-// Displays a string with a scrolling marquee effect
-static void oled_marquee(char x, char y, char const *str, int *offset)
+// Displays a string with a scrolling marquee effect.
+// "speed" can be up to 8. "offset" is updated as it scrolls.
+static void oled_marquee(char x, char y, char w,
+                         char const *str, int *offset, int speed)
 {
     // Use page mode.
     i2c_start(OLED_ADDR);
@@ -357,31 +359,37 @@ static void oled_marquee(char x, char y, char const *str, int *offset)
     // TODO: Make the marquee loop nicely
     i2c_start(OLED_ADDR);
     i2c_send_byte(OLED_DATA);
-    for (char const *str_ptr = str + (*offset >> 3); *str_ptr != '\0'; str_ptr++) {
+
+    char const *str_ptr = str + (*offset >> 3);
+    while (w != 0) {
         char c = *str_ptr;
         char idx = (32 <= c && c < 128) ? c - 32 : 3;
         char const *ptr = charset + idx * 8 + sub_offset;
         for (int i = 8 - sub_offset; i > 0; i--) {
             i2c_send_byte(*ptr++);
+            if (--w == 0) {
+                break;
+            }
         }
         sub_offset = 0;
+        if (*++str_ptr == '\0') {
+            str_ptr = str;
+        }
     }
     i2c_stop();
 
     // Move the pointer along, returning to the start once we hit the end.
-    (*offset)++;
+    *offset += speed;
     if (str[*offset >> 3] == '\0') {
         *offset &= 7;
     }
 }
 
+////////////////////////////////////////////////////////////////////////
+// And the main program itself...
+//
 
-
-static void oled_images(void)
-{
-    oled_blit(0, 0, 24, 3, head);
-    oled_blit(128 - 24, 0, 24, 3, heels);
-}
+char const message_1[] = "My little ssd1306+teensy 2.0 demo! ";
 
 int main(void)
 {
@@ -398,15 +406,16 @@ int main(void)
     usb_init();
     oled_init();
     oled_clear();
-    oled_images();
-    oled_write(32, 1, "Hello,");
-    oled_write(36, 2, "world!");
+    oled_blit(0, 0, 24, 3, head);
+    oled_blit(128 - 24, 0, 24, 3, heels);
+    oled_write(32, 0, "Hello,");
+    oled_write(36, 1, "world!");
 
-    int offset = 0;
+    int offset1 = 0;
 
     // Blink and print. \o/
     while (1) {
-        _delay_ms(50);
-        oled_marquee(24, 3, "Test", &offset);
+        _delay_ms(20);
+        oled_marquee(24, 2 , 128 - 24 - 24, message_1, &offset1, 2);
     }
 }
