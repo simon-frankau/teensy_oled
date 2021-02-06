@@ -1,7 +1,17 @@
+//
+// image2teensy: Quick, hacky tool to convert a png to a bitmap usable
+// on an SSD 1780 display.
+//
+
+use std::env;
 use std::fs::File;
 
 fn main() {
-    let decoder = png::Decoder::new(File::open("../images/head.png").unwrap());
+    let mut args = env::args();
+    assert_eq!(args.len(), 2);
+    let file_name = args.nth(1).unwrap();
+
+    let decoder = png::Decoder::new(File::open(file_name).unwrap());
     let (info, mut reader) = decoder.read_info().unwrap();
     // Allocate the output buffer.
     let mut buf = vec![0; info.buffer_size()];

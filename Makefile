@@ -70,6 +70,12 @@ F_CPU = 2000000
 FORMAT = ihex
 
 
+# Generated source files directory
+#     To put generated source files in current directory, use a dot (.), do
+#     NOT make
+#     this an empty or blank macro!
+GENDIR = gen
+
 # Object files directory
 #     To put object files in current directory, use a dot (.), do NOT make
 #     this an empty or blank macro!
@@ -586,6 +592,11 @@ $(OBJDIR)/%.o : %.S
 %.i : %.c
 	$(CC) -E -mmcu=$(MCU) -I. $(CFLAGS) $< -o $@ 
 
+# Build bitmaps from pngs:
+$(GENDIR)/%.h: images/%.png
+	mkdir -p gen
+	cd tools && cargo run ../$< > ../$@
+
 # Target: clean project.
 clean: begin clean_list end
 
@@ -612,6 +623,9 @@ $(shell mkdir $(OBJDIR) 2>/dev/null)
 
 # And output files directory
 $(shell mkdir $(OUTDIR) 2>/dev/null)
+
+# And intermediate generated files director
+$(shell mkdir gen 2>/dev/null)
 
 # Include the dependency files.
 -include $(shell mkdir .dep 2>/dev/null) $(wildcard .dep/*)
