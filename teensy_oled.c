@@ -12,6 +12,7 @@
 #include <avr/pgmspace.h>
 #include <util/delay.h>
 
+#include "gen/charset.h"
 #include "gen/head.h"
 #include "gen/heels.h"
 #include "usb_debug_only.h"
@@ -314,6 +315,31 @@ static void oled_blit(char x, char y, char w, char h, char const *image)
     }
 }
 
+// Displays a string using the ZX Spectrum character set.
+static void oled_write(char x, char y, char const *str)
+{
+    // Use page mode.
+    i2c_start(OLED_ADDR);
+    i2c_send_byte(OLED_CMD);
+    i2c_send_byte(OLED_SET_ADDR_MODE); i2c_send_byte(0x02); // Page mode
+    i2c_send_byte(OLED_SET_PAGE_START_ADDR | y);
+    i2c_send_byte(OLED_SET_UPPER_COLUMN | (x >> 4));
+    i2c_send_byte(OLED_SET_LOWER_COLUMN | (x & 0x0f));
+    i2c_stop();
+
+    i2c_start(OLED_ADDR);
+    i2c_send_byte(OLED_DATA);
+    for (; *str != '\0'; str++) {
+        char c = *str;
+        char idx = (32 <= c && c < 128) ? c - 32 : 3;
+        char const *ptr = charset + idx * 8;
+        for (int i = 8; i > 0; i--) {
+            i2c_send_byte(*ptr++);
+        }
+    }
+    i2c_stop();
+}
+
 static void oled_images(void)
 {
     oled_blit(0, 0, 24, 3, head);
@@ -347,6 +373,8 @@ int main(void)
             oled_images();
         } else {
             oled_clear();
+            oled_write(32, 1, "Hello,");
+            oled_write(32, 2, "world!");
         }
         flip = !flip;
     }
