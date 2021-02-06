@@ -340,6 +340,43 @@ static void oled_write(char x, char y, char const *str)
     i2c_stop();
 }
 
+// Displays a string with a scrolling marquee effect
+static void oled_marquee(char x, char y, char const *str, int *offset)
+{
+    // Use page mode.
+    i2c_start(OLED_ADDR);
+    i2c_send_byte(OLED_CMD);
+    i2c_send_byte(OLED_SET_ADDR_MODE); i2c_send_byte(0x02); // Page mode
+    i2c_send_byte(OLED_SET_PAGE_START_ADDR | y);
+    i2c_send_byte(OLED_SET_UPPER_COLUMN | (x >> 4));
+    i2c_send_byte(OLED_SET_LOWER_COLUMN | (x & 0x0f));
+    i2c_stop();
+
+    char sub_offset = *offset & 0x07;
+
+    // TODO: Make the marquee loop nicely
+    i2c_start(OLED_ADDR);
+    i2c_send_byte(OLED_DATA);
+    for (char const *str_ptr = str + (*offset >> 3); *str_ptr != '\0'; str_ptr++) {
+        char c = *str_ptr;
+        char idx = (32 <= c && c < 128) ? c - 32 : 3;
+        char const *ptr = charset + idx * 8 + sub_offset;
+        for (int i = 8 - sub_offset; i > 0; i--) {
+            i2c_send_byte(*ptr++);
+        }
+        sub_offset = 0;
+    }
+    i2c_stop();
+
+    // Move the pointer along, returning to the start once we hit the end.
+    (*offset)++;
+    if (str[*offset >> 3] == '\0') {
+        *offset &= 7;
+    }
+}
+
+
+
 static void oled_images(void)
 {
     oled_blit(0, 0, 24, 3, head);
@@ -359,23 +396,17 @@ int main(void)
 
     // Initialise USB for debug, but don't wait.
     usb_init();
+    oled_init();
+    oled_clear();
+    oled_images();
+    oled_write(32, 1, "Hello,");
+    oled_write(36, 2, "world!");
 
-    int flip = 0;
+    int offset = 0;
 
     // Blink and print. \o/
     while (1) {
-        led_on();
-        _delay_ms(500);
-        led_off();
-        _delay_ms(500);
-        oled_init();
-        if (flip) {
-            oled_images();
-        } else {
-            oled_clear();
-            oled_write(32, 1, "Hello,");
-            oled_write(32, 2, "world!");
-        }
-        flip = !flip;
+        _delay_ms(50);
+        oled_marquee(24, 3, "Test", &offset);
     }
 }
