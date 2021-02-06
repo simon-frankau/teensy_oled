@@ -1,4 +1,6 @@
 *~
+gen/*
 obj/*
 out/*
+tools/target/*
 .dep/*
