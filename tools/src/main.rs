@@ -4,12 +4,14 @@
 //
 
 use std::env;
+use std::path::Path;
 use std::fs::File;
 
 fn main() {
     let mut args = env::args();
     assert_eq!(args.len(), 2);
-    let file_name = args.nth(1).unwrap();
+    let file_name_str = args.nth(1).unwrap();
+    let file_name = Path::new(&file_name_str);
 
     let decoder = png::Decoder::new(File::open(file_name).unwrap());
     let (info, mut reader) = decoder.read_info().unwrap();
@@ -21,7 +23,8 @@ fn main() {
     assert_eq!(info.color_type, png::ColorType::Grayscale);
     assert_eq!(info.bit_depth, png::BitDepth::Eight);
 
-    println!("static const char image[] = {{");
+    let stem = file_name.file_stem().unwrap().to_str().unwrap();
+    println!("static const char {}[] = {{", stem);
 
     // Break image apart into 8 pixel rows, record each 8-bit column.
     let w = info.width;
@@ -32,10 +35,8 @@ fn main() {
             let mut c: u8 = 0;
             for y in 0..8 {
                 let y_total = y_page * 8 + y;
-                if y_total < h {
-                    if buf[(y_total * w + x) as usize] >= 0x80 {
-                        c |= 1 << y;
-                    }
+                if y_total < h && buf[(y_total * w + x) as usize] >= 0x80 {
+                    c |= 1 << y;
                 }
             }
             print!("0x{:02x}, ", c);

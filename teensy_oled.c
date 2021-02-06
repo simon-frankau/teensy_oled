@@ -13,6 +13,7 @@
 #include <util/delay.h>
 
 #include "gen/head.h"
+#include "gen/heels.h"
 #include "usb_debug_only.h"
 #include "print.h"
 
@@ -338,7 +339,7 @@ static void oled_pattern3(void)
     i2c_send_byte(0x40);
 
     for (int i = 0; i < 24 * 3; i++) {
-        i2c_send_byte(image[i]);
+        i2c_send_byte(heels[i]);
     }
 
     i2c_stop();
