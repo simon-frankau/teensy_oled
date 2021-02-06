@@ -43,6 +43,11 @@
 # Target file name (without extension).
 TARGET = teensy_oled
 
+# PNG images
+IMAGES=$(wildcard $(IMGDIR)/*.png)
+
+# And the files generated from them.
+GENSRC=$(IMAGES:images/%.png=$(GENDIR)/%.h)
 
 # List C source files here. (C dependencies are automatically generated.)
 SRC =	$(TARGET).c \
@@ -69,6 +74,9 @@ F_CPU = 2000000
 # Output format. (can be srec, ihex, binary)
 FORMAT = ihex
 
+
+# Directory where images (PNGs) live.
+IMGDIR = images
 
 # Generated source files directory
 #     To put generated source files in current directory, use a dot (.), do
@@ -592,10 +600,13 @@ $(OBJDIR)/%.o : %.S
 %.i : %.c
 	$(CC) -E -mmcu=$(MCU) -I. $(CFLAGS) $< -o $@ 
 
-# Build bitmaps from pngs:
-$(GENDIR)/%.h: images/%.png
+# Build bitmaps from PNGs:
+$(GENDIR)/%.h: $(IMGDIR)/%.png
 	mkdir -p gen
 	cd tools && cargo run ../$< > ../$@
+
+# Ensure the main source file has these built.
+$(TARGET).c:	$(GENSRC)
 
 # Target: clean project.
 clean: begin clean_list end
@@ -612,11 +623,13 @@ clean_list :
 	$(REMOVE) $(OUTDIR)/$(TARGET).lss
 	$(REMOVE) $(SRC:%.c=$(OBJDIR)/%.o)
 	$(REMOVE) $(SRC:%.c=$(OBJDIR)/%.lst)
+	$(REMOVE) $(SRC:%.c=$(OBJDIR)/%.lst)
+	$(REMOVE) $(IMAGES:images/%.png=$(GENDIR)/%.h)
 	$(REMOVE) $(SRC:.c=.s)
 	$(REMOVE) $(SRC:.c=.d)
 	$(REMOVE) $(SRC:.c=.i)
 	$(REMOVEDIR) .dep
-
+	cd tools && cargo clean
 
 # Create object files directory
 $(shell mkdir $(OBJDIR) 2>/dev/null)
