@@ -8,10 +8,13 @@
  * (C) 2021 Simon Frankau
  */
 
+#include <stdlib.h>
+
 #include <avr/io.h>
 #include <avr/pgmspace.h>
 #include <util/delay.h>
 
+#include "cos_table.h"
 #include "gen/charset.h"
 #include "gen/head.h"
 #include "gen/heels.h"
@@ -433,11 +436,11 @@ static void oled_bungee_marquee(char x, char y, char w,
 }
 
 // Like write, but with vertical wobble.
-static void oled_wobble(char x, char y, char const *str)
+static void oled_wobble(char x, char y, char const *str, char *phase)
 {
     {
         oled_set_page_mode(y, x);
-        char shift = 0;
+        char shift = *phase;
         unsigned char const *str_ptr = (unsigned char const *)str;
         i2c_start(OLED_ADDR);
         i2c_send_byte(OLED_DATA);
@@ -446,7 +449,7 @@ static void oled_wobble(char x, char y, char const *str)
             char idx = (32 <= c && c < 128) ? c - 32 : 3;
             char const *ptr = charset + idx * 8;
             for (int i = 8; i > 0; i--) {
-                char offset = (shift++/2 & 7);
+                char offset = cos_table_64_4[shift++ & 0x3f];
                 i2c_send_byte(*ptr++ << offset);
             }
         }
@@ -455,7 +458,7 @@ static void oled_wobble(char x, char y, char const *str)
 
     {
         oled_set_page_mode(y + 1, x);
-        char shift = 0;
+        char shift = *phase;
         unsigned char const *str_ptr = (unsigned char const *)str;
         i2c_start(OLED_ADDR);
         i2c_send_byte(OLED_DATA);
@@ -464,12 +467,14 @@ static void oled_wobble(char x, char y, char const *str)
             char idx = (32 <= c && c < 128) ? c - 32 : 3;
             char const *ptr = charset + idx * 8;
             for (int i = 8; i > 0; i--) {
-                char offset = 8 - (shift++/2 & 7);
+                char offset = 8 - cos_table_64_4[shift++ & 0x3f];
                 i2c_send_byte(*ptr++ >> offset);
             }
         }
         i2c_stop();
     }
+
+    (*phase)++;
 }
 
 
@@ -479,7 +484,7 @@ static void oled_wobble(char x, char y, char const *str)
 
 char const message_1[] = "My little ssd1306+teensy 2.0 demo. ";
 char const message_2[] = "Look... bendy text! :) ";
-char const message_3[] = "Wobble";
+char const message_3[] = "Wobble!";
 
 int main(void)
 {
@@ -505,11 +510,12 @@ int main(void)
 
     int offset1 = 0;
     int offset2 = 0;
+    char phase = 0;
 
     while (1) {
         _delay_ms(20);
         oled_marquee(24, 2 , 128 - 24 - 24, message_1, &offset1, 2);
         oled_bungee_marquee(0, 3 , 128, message_2, &offset2);
-        oled_wobble(m3_x, 0, message_3);
+        oled_wobble(m3_x, 0, message_3, &phase);
     }
 }
