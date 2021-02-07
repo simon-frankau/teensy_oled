@@ -432,13 +432,54 @@ static void oled_bungee_marquee(char x, char y, char w,
     }
 }
 
+// Like write, but with vertical wobble.
+static void oled_wobble(char x, char y, char const *str)
+{
+    {
+        oled_set_page_mode(y, x);
+        char shift = 0;
+        unsigned char const *str_ptr = (unsigned char const *)str;
+        i2c_start(OLED_ADDR);
+        i2c_send_byte(OLED_DATA);
+        for (; *str_ptr != '\0'; str_ptr++) {
+            char c = *str_ptr;
+            char idx = (32 <= c && c < 128) ? c - 32 : 3;
+            char const *ptr = charset + idx * 8;
+            for (int i = 8; i > 0; i--) {
+                char offset = (shift++/2 & 7);
+                i2c_send_byte(*ptr++ << offset);
+            }
+        }
+        i2c_stop();
+    }
+
+    {
+        oled_set_page_mode(y + 1, x);
+        char shift = 0;
+        unsigned char const *str_ptr = (unsigned char const *)str;
+        i2c_start(OLED_ADDR);
+        i2c_send_byte(OLED_DATA);
+        for (; *str_ptr != '\0'; str_ptr++) {
+            char c = *str_ptr;
+            char idx = (32 <= c && c < 128) ? c - 32 : 3;
+            char const *ptr = charset + idx * 8;
+            for (int i = 8; i > 0; i--) {
+                char offset = 8 - (shift++/2 & 7);
+                i2c_send_byte(*ptr++ >> offset);
+            }
+        }
+        i2c_stop();
+    }
+}
+
 
 ////////////////////////////////////////////////////////////////////////
 // And the main program itself...
 //
 
-char const message_1[] = "My little ssd1306+teensy 2.0 demo! ";
-char const message_2[] = "~~ Bendy! ~~ * ";
+char const message_1[] = "My little ssd1306+teensy 2.0 demo. ";
+char const message_2[] = "Look... bendy text! :) ";
+char const message_3[] = "Wobble";
 
 int main(void)
 {
@@ -446,7 +487,7 @@ int main(void)
     // when the CPU starts.
     //
     // Don't forget to sync this with F_CPU in the Makefile.
-    cpu_prescale(CPU_2MHz);
+    cpu_prescale(CPU_8MHz);
     led_init();
     led_off();
     i2c_init();
@@ -457,16 +498,18 @@ int main(void)
     oled_clear();
     oled_blit(0, 0, 24, 3, head);
     oled_blit(128 - 24, 0, 24, 3, heels);
-    oled_write(32, 0, "Hello,");
-    oled_write(36, 1, "world!");
+
+    // Find the x coordinate to centre message_3:
+    char m3_len = sizeof(message_3) - 1; // Remove NUL.
+    char m3_x = (128 - 8 * m3_len) / 2;
 
     int offset1 = 0;
     int offset2 = 0;
 
-    // Blink and print. \o/
     while (1) {
         _delay_ms(20);
         oled_marquee(24, 2 , 128 - 24 - 24, message_1, &offset1, 2);
         oled_bungee_marquee(0, 3 , 128, message_2, &offset2);
+        oled_wobble(m3_x, 0, message_3);
     }
 }
