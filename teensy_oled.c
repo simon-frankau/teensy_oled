@@ -478,6 +478,15 @@ static void oled_wobble(char x, char y, char const *str, char *phase)
 }
 
 
+static void oled_contrast(unsigned char c)
+{
+    i2c_start(OLED_ADDR);
+    i2c_send_byte(OLED_CMD);
+    i2c_send_byte(OLED_SET_CONTRAST);
+    i2c_send_byte(c);
+    i2c_stop();
+}
+
 ////////////////////////////////////////////////////////////////////////
 // And the main program itself...
 //
@@ -512,8 +521,22 @@ int main(void)
     int offset2 = 0;
     char phase = 0;
 
+    int contrast = 0;
+
     while (1) {
         _delay_ms(20);
+
+        // No idea if continually adjusting the contrast is good for
+        // the hardware, but it's a nice effect.
+#define DO_CONTRAST
+#ifdef DO_CONTRAST
+        contrast += 3;
+        if (contrast> 100) {
+            contrast -= 200;
+        }
+        oled_contrast(abs(contrast) + 30);
+#endif // DO_CONTRAST
+
         oled_marquee(24, 2 , 128 - 24 - 24, message_1, &offset1, 2);
         oled_bungee_marquee(0, 3 , 128, message_2, &offset2);
         oled_wobble(m3_x, 0, message_3, &phase);
