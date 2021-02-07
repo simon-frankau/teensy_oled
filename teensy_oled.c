@@ -281,6 +281,18 @@ static void oled_clear(void)
     i2c_stop();
 }
 
+// Set page mode, and initial page (y*8) and x coordinate.
+static void oled_set_page_mode(char page, char x) {
+    i2c_start(OLED_ADDR);
+    i2c_send_byte(OLED_CMD);
+    i2c_send_byte(OLED_SET_ADDR_MODE); i2c_send_byte(0x02); // Page mode
+    i2c_send_byte(OLED_SET_PAGE_START_ADDR | page);
+    // High nibble must be loaded first, else it zeros the low nibble.
+    i2c_send_byte(OLED_SET_UPPER_COLUMN | (x >> 4));
+    i2c_send_byte(OLED_SET_LOWER_COLUMN | (x & 0x0f));
+    i2c_stop();
+}
+
 // Blit an image to the screen. Y coordinates are pages (multiples of 8 pixels)
 static void oled_blit(char x, char y, char w, char h, char const *image)
 {
@@ -297,14 +309,7 @@ static void oled_blit(char x, char y, char w, char h, char const *image)
 
     char const *image_ptr = image;
     for (int page = y; page < y + h; page++) {
-
-        i2c_start(OLED_ADDR);
-        i2c_send_byte(OLED_CMD);
-        i2c_send_byte(OLED_SET_PAGE_START_ADDR | page);
-        // High nibble must be loaded first, else it zeros the low nibble.
-        i2c_send_byte(OLED_SET_UPPER_COLUMN | (x >> 4));
-        i2c_send_byte(OLED_SET_LOWER_COLUMN | (x & 0x0f));
-        i2c_stop();
+        oled_set_page_mode(page, x);
 
         i2c_start(OLED_ADDR);
         i2c_send_byte(OLED_DATA);
@@ -318,14 +323,7 @@ static void oled_blit(char x, char y, char w, char h, char const *image)
 // Displays a string using the ZX Spectrum character set.
 static void oled_write(char x, char y, char const *str)
 {
-    // Use page mode.
-    i2c_start(OLED_ADDR);
-    i2c_send_byte(OLED_CMD);
-    i2c_send_byte(OLED_SET_ADDR_MODE); i2c_send_byte(0x02); // Page mode
-    i2c_send_byte(OLED_SET_PAGE_START_ADDR | y);
-    i2c_send_byte(OLED_SET_UPPER_COLUMN | (x >> 4));
-    i2c_send_byte(OLED_SET_LOWER_COLUMN | (x & 0x0f));
-    i2c_stop();
+    oled_set_page_mode(y, x);
 
     i2c_start(OLED_ADDR);
     i2c_send_byte(OLED_DATA);
@@ -345,18 +343,10 @@ static void oled_write(char x, char y, char const *str)
 static void oled_marquee(char x, char y, char w,
                          char const *str, int *offset, int speed)
 {
-    // Use page mode.
-    i2c_start(OLED_ADDR);
-    i2c_send_byte(OLED_CMD);
-    i2c_send_byte(OLED_SET_ADDR_MODE); i2c_send_byte(0x02); // Page mode
-    i2c_send_byte(OLED_SET_PAGE_START_ADDR | y);
-    i2c_send_byte(OLED_SET_UPPER_COLUMN | (x >> 4));
-    i2c_send_byte(OLED_SET_LOWER_COLUMN | (x & 0x0f));
-    i2c_stop();
+    oled_set_page_mode(y, x);
 
     char sub_offset = *offset & 0x07;
 
-    // TODO: Make the marquee loop nicely
     i2c_start(OLED_ADDR);
     i2c_send_byte(OLED_DATA);
 
@@ -385,11 +375,70 @@ static void oled_marquee(char x, char y, char w,
     }
 }
 
+static void oled_bungee_marquee_aux(char const *str, int offset, int w)
+{
+    // We increase the scaling factor before the midpoint, decrease it after.
+    int midpoint = (w >> 1);
+    int scale = 0;
+
+    char const *str_ptr = str + (offset >> 3);
+    char sub_offset = offset & 0x07;
+
+    // Run over the characters in the message loop.
+    while (1) {
+        char c = *str_ptr;
+        char idx = (32 <= c && c < 128) ? c - 32 : 3;
+        char const *ptr = charset + idx * 8 + sub_offset;
+        // For each slice of the character displayed...
+        for (int i = 8 - sub_offset; i > 0; i--) {
+            // The factor of 8 empirically makes a nice effect on a 128 display.
+            for (char j = 0; j < 1 + (scale / 8); j++) {
+                i2c_send_byte(*ptr);
+                if (--w == 0) {
+                    return;
+                }
+            }
+            ptr++;
+
+            // Scaling code. The check is because the count up and
+            // down is a bit uneven and can end up below 0 otherwise.
+            scale += (w > midpoint) ? 1 : -1;
+            if (scale < 0) {
+                scale = 0;
+            }
+        }
+        sub_offset = 0;
+        if (*++str_ptr == '\0') {
+            str_ptr = str;
+        }
+    }
+}
+
+// Like a marquee, but with characters of varying width.
+static void oled_bungee_marquee(char x, char y, char w,
+                                char const *str, int *offset)
+{
+    oled_set_page_mode(y, x);
+
+    i2c_start(OLED_ADDR);
+    i2c_send_byte(OLED_DATA);
+    oled_bungee_marquee_aux(str, *offset, w);
+    i2c_stop();
+
+    // Move the pointer along, returning to the start once we hit the end.
+    (*offset)++;
+    if (str[*offset >> 3] == '\0') {
+        *offset &= 7;
+    }
+}
+
+
 ////////////////////////////////////////////////////////////////////////
 // And the main program itself...
 //
 
 char const message_1[] = "My little ssd1306+teensy 2.0 demo! ";
+char const message_2[] = "~~ Bendy! ~~ * ";
 
 int main(void)
 {
@@ -412,10 +461,12 @@ int main(void)
     oled_write(36, 1, "world!");
 
     int offset1 = 0;
+    int offset2 = 0;
 
     // Blink and print. \o/
     while (1) {
         _delay_ms(20);
         oled_marquee(24, 2 , 128 - 24 - 24, message_1, &offset1, 2);
+        oled_bungee_marquee(0, 3 , 128, message_2, &offset2);
     }
 }
