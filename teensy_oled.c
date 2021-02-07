@@ -21,11 +21,21 @@
 #include "usb_debug_only.h"
 #include "print.h"
 
-
+// Support the case where the OLED is configured for the alternate I2C
+// address.
 #ifdef ALTERNATIVE_OLED_ADDRESS
 static const char OLED_SUB_ADDR = 2;
 #else
 static const char OLED_SUB_ADDR = 0;
+#endif
+
+// Suport rotating the display by 180 degrees.
+#ifdef FLIPPED
+    #define HFLIP 1
+    #define VFLIP 8
+#else
+    #define HFLIP 0
+    #define VFLIP 0
 #endif
 
 ////////////////////////////////////////////////////////////////////////
@@ -218,9 +228,9 @@ static const char oled_init_instrs[] = {
     // Set display start line
     OLED_SET_DISPLAY_START_LINE + 0x00,
     // Set segment remap
-    OLED_SET_SEGMENT_REMAP | 0x00, // 0x01 for reverse mapping
+    OLED_SET_SEGMENT_REMAP | HFLIP,
     // Set COM scan direction
-    OLED_SET_COM_SCAN_DIR | 0x00, // 0x08 for reverse mapping
+    OLED_SET_COM_SCAN_DIR | VFLIP,
     // Set COM pin hw conf
     OLED_SET_COM_HW_CONF, 0x02, // Alternate lines, normal direction
     // Contrast control
@@ -528,7 +538,6 @@ int main(void)
 
         // No idea if continually adjusting the contrast is good for
         // the hardware, but it's a nice effect.
-#define DO_CONTRAST
 #ifdef DO_CONTRAST
         contrast += 3;
         if (contrast> 100) {
