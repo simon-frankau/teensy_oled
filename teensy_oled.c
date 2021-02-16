@@ -161,13 +161,9 @@ static char i2c_send_byte(char c)
     i2c_clock();
 
     return acked;
-
-    if (!acked) {
-        print ("I2C NACK :(\n");
-    }
 }
 
-static inline void i2c_start(char addr)
+static inline char i2c_start(char addr)
 {
     // An i2c transaction is initiated with an SDA transition while
     // SCL is high...
@@ -175,7 +171,7 @@ static inline void i2c_start(char addr)
     _delay_us(1);
     i2c_pulldown(SCL);
 
-    i2c_send_byte(addr);
+    return i2c_send_byte(addr);
 }
 
 static inline void i2c_stop(void)
@@ -266,19 +262,29 @@ static const int oled_full_screen_instrs_len =
     sizeof(oled_full_screen_instrs) / sizeof(*oled_full_screen_instrs);
 
 // Send a sequence of bytes over i2c.
-static void oled_sequence(char const *data, int count)
+static char oled_sequence(char const *data, int count)
 {
-    i2c_start(OLED_ADDR);
-    for (int i = 0; i < count; i++) {
-        i2c_send_byte(data[i]);
+    if (!i2c_start(OLED_ADDR)) {
+        return 0;
+    }
+    int i;
+    for (i = 0; i < count; i++) {
+        if (!i2c_send_byte(data[i])) {
+            break;
+        }
     }
     i2c_stop();
+    return i == count;
 }
 
-static void oled_init(void)
+static char oled_init(void)
 {
-    oled_sequence(oled_init_instrs, oled_init_instrs_len);
+    return oled_sequence(oled_init_instrs, oled_init_instrs_len);
 }
+
+// I'm lazy, so I'm going to assume that once we have successfully
+// initialised the display, all other operations succeed. No error
+// checking on the remaining functions.
 
 static void oled_clear(void)
 {
@@ -518,7 +524,12 @@ int main(void)
 
     // Initialise USB for debug, but don't wait.
     usb_init();
-    oled_init();
+
+    // Wait for success init of the OLED.
+    while (!oled_init()) {
+        _delay_ms(20);
+    }
+    // And then do the initial drawing.
     oled_clear();
     oled_blit(0, 0, 24, 3, head);
     oled_blit(128 - 24, 0, 24, 3, heels);
