@@ -1,5 +1,7 @@
 # Teensy 2.0 & SSD1306 OLED display test
 
+![A small OLED display, driven by a Teensy board](./teensy_oled.jpg)
+
 This is my little program to drive an SSD1306-based 128x32 OLED
 display from a Teensy 2.0 (atmega32u4-based board) using I2C.
 
@@ -16,9 +18,9 @@ them both in a breadboard, wire up power and ground, connect `SCL` to
 
 As I'm developing on a Mac, I installed [Crosspack
 AVR](https://www.obdev.at/products/crosspack/index.html). I'm using
-`[teensy_loader_cli](https://github.com/PaulStoffregen/teensy_loader_cli)`
+[`teensy_loader_cli`](https://github.com/PaulStoffregen/teensy_loader_cli)
 to program the Teensy, and
-`[hid_listen](https://www.pjrc.com/teensy/hid_listen.html)` from
+[`hid_listen`](https://www.pjrc.com/teensy/hid_listen.html) from
 pjrc.com to supply debug output. The utilities source and Makefile
 come from pjrc's ["blinky"
 example](https://www.pjrc.com/teensy/blinky.zip).
